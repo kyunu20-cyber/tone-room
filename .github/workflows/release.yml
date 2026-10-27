@@ -1,0 +1,50 @@
+# v로 시작하는 태그를 올리면 Apple Silicon용 dmg를 만들어 Releases에 붙인다(Intel 맥은 지원하지 않음).
+# AI 업스케일 도구(vtsr)는 macOS 26 SDK가 필요해서 Xcode 26이 있으면 그것으로 빌드한다. 앱 자체는 macOS 14 이상에서 돈다.
+name: release
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Xcode 26 선택(있으면)
+        run: |
+          X=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1 || true)
+          if [ -n "$X" ]; then sudo xcode-select -s "$X"; fi
+          xcodebuild -version
+      - run: brew install ffmpeg   # 테스트가 결과 검증에 ffprobe를 쓴다
+      - run: python -m venv backend/.venv && backend/.venv/bin/pip install -r backend/requirements.txt pyinstaller
+      - run: cd backend && .venv/bin/python -m pytest -q
+      - run: cd frontend && npm ci
+      - run: packaging/build.sh
+      - name: 앱에 AI 업스케일 도구가 들어갔는지 확인
+        run: ls -la "dist/TONE ROOM.app/Contents/Frameworks/vtsr" || ls -R "dist/TONE ROOM.app/Contents" | grep -n vtsr || echo "vtsr 없음"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dmg
+          path: dist/*.dmg
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dmg
+          path: dmgs
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dmgs/*.dmg

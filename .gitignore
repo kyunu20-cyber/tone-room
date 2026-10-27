@@ -1,0 +1,11 @@
+backend/.venv/
+__pycache__/
+.pytest_cache/
+data/
+frontend/node_modules/
+frontend/.next/
+*.log
+.DS_Store
+tools/vtsr/vtsr
+dist/
+build/
